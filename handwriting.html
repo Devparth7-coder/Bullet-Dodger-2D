@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bullet Dodger 2D - AI Aim Trainer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #111;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            margin: 20px auto;
+            border: 2px solid #333;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            text-align: left;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>Round: <span id="round">1</span></div>
+        <div>Difficulty: <span id="difficulty">1.0x</span></div>
+        <div>Slow-Mo: <span id="slowmo">100%</span></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameOver">
+        <h2>Game Over!</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button id="restartBtn">Play Again</button>
+    </div>
+
+    <audio id="shootSound" src="https://assets.mixkit.co/sfx/preview/mixkit-short-laser-gun-shot-1670.mp3" preload="auto"></audio>
+    <audio id="explosionSound" src="https://assets.mixkit.co/sfx/preview/mixkit-explosion-impact-1684.mp3" preload="auto"></audio>
+
+    <script>
+        // Game setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const roundElement = document.getElementById('round');
+        const difficultyElement = document.getElementById('difficulty');
+        const slowmoElement = document.getElementById('slowmo');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const restartBtn = document.getElementById('restartBtn');
+        const shootSound = document.getElementById('shootSound');
+        const explosionSound = document.getElementById('explosionSound');
+
+        // Set canvas size
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // Game state
+        let score = 0;
+        let round = 1;
+        let difficulty = 1.0;
+        let gameOver = false;
+        let slowMo = false;
+        let slowMoCharge = 100;
+        let playerHit = false;
+        let glitchEffect = false;
+        let glitchTimer = 0;
+
+        // Player
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 15,
+            speed: 5,
+            color: '#4CAF50',
+            trail: []
+        };
+
+        // Bullets
+        let bullets = [];
+        let enemies = [];
+        let particles = [];
+
+        // Input
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            Shift: false
+        };
+
+        // Event listeners
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+                if (e.key === 'Shift') slowMo = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+                if (e.key === 'Shift') slowMo = false;
+            }
+        });
+
+        restartBtn.addEventListener('click', restartGame);
+
+        // Game functions
+        function spawnEnemy() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch (side) {
+                case 0: // top
+                    x = Math.random() * canvas.width;
+                    y = -30;
+                    break;
+                case 1: // right
+                    x = canvas.width + 30;
+                    y = Math.random() * canvas.height;
+                    break;
+                case 2: // bottom
+                    x = Math.random() * canvas.width;
+                    y = canvas.height + 30;
+                    break;
+                case 3: // left
+                    x = -30;
+                    y = Math.random() * canvas.height;
+                    break;
+            }
+            
+            enemies.push({
+                x,
+                y,
+                radius: 10,
+                speed: 1 + Math.random() * difficulty,
+                color: `hsl(${Math.random() * 60 + 330}, 100%, 50%)`,
+                shootCooldown: Math.max(500, 2000 / difficulty),
+                lastShot: 0,
+                health: 1
+            });
+        }
+
+        function shootBullet(shooter) {
+            const angle = Math.atan2(player.y - shooter.y, player.x - shooter.x);
+            const speed = 5 * difficulty;
+            
+            bullets.push({
+                x: shooter.x,
+                y: shooter.y,
+                radius: 5,
+                speedX: Math.cos(angle) * speed,
+                speedY: Math.sin(angle) * speed,
+                color: shooter.color
+            });
+            
+            // Play shoot sound with random pitch
+            shootSound.currentTime = 0;
+            shootSound.playbackRate = 0.8 + Math.random() * 0.4;
+            shootSound.play();
+        }
+
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    x,
+                    y,
+                    radius: Math.random() * 5 + 2,
+                    color,
+                    speedX: Math.random() * 6 - 3,
+                    speedY: Math.random() * 6 - 3,
+                    life: 30 + Math.random() * 20,
+                    fade: 0.05 + Math.random() * 0.1
+                });
+            }
+            explosionSound.currentTime = 0;
+            explosionSound.play();
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            // Update slow-mo
+            if (slowMo) {
+                slowMoCharge -= 1;
+                if (slowMoCharge <= 0) {
+                    slowMo = false;
+                    slowMoCharge = 0;
+                }
+            } else if (slowMoCharge < 100) {
+                slowMoCharge += 0.2;
+            }
+
+            // Update player trail
+            player.trail.push({x: player.x, y: player.y});
+            if (player.trail.length > 20) {
+                player.trail.shift();
+            }
+
+            // Move player with slow-mo effect
+            const actualSpeed = player.speed * (slowMo ? 0.5 : 1);
+            
+            if (keys.ArrowUp) player.y -= actualSpeed;
+            if (keys.ArrowDown) player.y += actualSpeed;
+            if (keys.ArrowLeft) player.x -= actualSpeed;
+            if (keys.ArrowRight) player.x += actualSpeed;
+
+            // Keep player in bounds
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+            // Spawn enemies
+            if (Math.random() < 0.02 * difficulty) {
+                spawnEnemy();
+            }
+
+            // Update enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                // Move toward player with some randomness
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                const randomOffset = (Math.random() - 0.5) * 0.5;
+                
+                enemy.x += Math.cos(angle + randomOffset) * enemy.speed;
+                enemy.y += Math.sin(angle + randomOffset) * enemy.speed;
+                
+                // Shoot at player
+                enemy.lastShot += slowMo ? 10 : 16;
+                if (enemy.lastShot >= enemy.shootCooldown) {
+                    shootBullet(enemy);
+                    enemy.lastShot = 0;
+                    enemy.shootCooldown = Math.max(300, 2000 / difficulty);
+                }
+                
+                // Remove if off screen
+                if (enemy.x < -50 || enemy.x > canvas.width + 50 || 
+                    enemy.y < -50 || enemy.y > canvas.height + 50) {
+                    enemies.splice(i, 1);
+                }
+            }
+
+            // Update bullets with slow-mo effect
+            const bulletSpeedFactor = slowMo ? 0.3 : 1;
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                bullet.x += bullet.speedX * bulletSpeedFactor;
+                bullet.y += bullet.speedY * bulletSpeedFactor;
+                
+                // Remove if off screen
+                if (bullet.x < -50 || bullet.x > canvas.width + 50 || 
+                    bullet.y < -50 || bullet.y > canvas.height + 50) {
+                    bullets.splice(i, 1);
+                }
+                
+                // Check collision with player
+                const dx = player.x - bullet.x;
+                const dy = player.y - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < player.radius + bullet.radius && !playerHit) {
+                    playerHit = true;
+                    createParticles(player.x, player.y, player.color);
+                    setTimeout(() => {
+                        gameOver = true;
+                        gameOverElement.style.display = 'block';
+                        finalScoreElement.textContent = score;
+                    }, 500);
+                }
+            }
+
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.life -= p.fade;
+                p.radius *= 0.98;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Increase difficulty over time
+            if (score > round * 10) {
+                round++;
+                difficulty = 1 + round * 0.1;
+                
+                // Glitch effect on new round
+                glitchEffect = true;
+                glitchTimer = 30;
+            }
+
+            // Update UI
+            scoreElement.textContent = score;
+            roundElement.textContent = round;
+            difficultyElement.textContent = difficulty.toFixed(1) + 'x';
+            slowmoElement.textContent = Math.floor(slowMoCharge) + '%';
+            
+            // Increment score
+            score += 0.1;
+        }
+
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Apply glitch effect if active
+            if (glitchEffect) {
+                glitchTimer--;
+                if (glitchTimer <= 0) {
+                    glitchEffect = false;
+                } else {
+                    ctx.save();
+                    ctx.globalAlpha = 0.7;
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Random offset for glitch effect
+                    const offsetX = (Math.random() - 0.5) * 20;
+                    const offsetY = (Math.random() - 0.5) * 20;
+                    ctx.translate(offsetX, offsetY);
+                }
+            }
+            
+            // Draw player trail
+            for (let i = 0; i < player.trail.length; i++) {
+                const point = player.trail[i];
+                const alpha = i / player.trail.length;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, player.radius * alpha, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(76, 175, 80, ${alpha * 0.5})`;
+                ctx.fill();
+            }
+            
+            // Draw player
+            if (!playerHit) {
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fillStyle = player.color;
+                ctx.fill();
+                
+                // Player glow
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius + 5, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(76, 175, 80, 0.5)`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw enemies
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+                
+                // Enemy aim line
+                ctx.beginPath();
+                ctx.moveTo(enemy.x, enemy.y);
+                ctx.lineTo(player.x, player.y);
+                ctx.strokeStyle = `${enemy.color}40`;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+            
+            // Draw bullets
+            bullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                ctx.fillStyle = bullet.color;
+                ctx.fill();
+                
+                // Bullet trail
+                ctx.beginPath();
+                ctx.moveTo(bullet.x - bullet.speedX * 0.5, bullet.y - bullet.speedY * 0.5);
+                ctx.lineTo(bullet.x, bullet.y);
+                ctx.strokeStyle = `${bullet.color}80`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            });
+            
+            // Draw particles
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `${p.color}${Math.min(p.life / 100, 1).toString(16).substring(2, 4)}`;
+                ctx.fill();
+            });
+            
+            // Reset glitch effect
+            if (glitchEffect) {
+                ctx.restore();
+            }
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function restartGame() {
+            score = 0;
+            round = 1;
+            difficulty = 1.0;
+            gameOver = false;
+            playerHit = false;
+            slowMo = false;
+            slowMoCharge = 100;
+            
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.trail = [];
+            
+            bullets = [];
+            enemies = [];
+            particles = [];
+            
+            gameOverElement.style.display = 'none';
+        }
+
+        // Start game
+        restartGame();
+        gameLoop();
+    </script>
+</body>
+</html>
