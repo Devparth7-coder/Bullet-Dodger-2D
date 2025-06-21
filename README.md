@@ -37,6 +37,8 @@ The game gets harder over time as more bullets spawn with increasing speed and r
 - Responsive and minimal design
 - Entirely browser-based – no installs needed
 
+
+https://github.com/user-attachments/assets/6472bc78-0eca-4b7d-86a7-5643683755b1
 ![14 06 2025_21 22 03_REC](https://github.com/user-attachments/assets/488b71fd-964a-4a9d-9790-ef92103a3858)
 ![14 06 2025_21 21 55_REC](https://github.com/user-attachments/assets/e263d2f3-3d07-4adb-8c3e-0071c7cededf)
 ![14 06 2025_21 21 45_REC](https://github.com/user-attachments/assets/2ee29d82-f99b-495a-a965-156eed016e50)
@@ -47,4 +49,4 @@ The game gets harder over time as more bullets spawn with increasing speed and r
 ![14 06 2025_21 20 57_REC](https://github.com/user-attachments/assets/ed5684b0-616a-48f1-8586-1f2f32daf61e)
 ![14 06 2025_21 20 41_REC](https://github.com/user-attachments/assets/f7eed335-7857-4316-a15d-7783d4b0d1b8)
 
-https://github.com/user-attachments/assets/6472bc78-0eca-4b7d-86a7-5643683755b1
+
